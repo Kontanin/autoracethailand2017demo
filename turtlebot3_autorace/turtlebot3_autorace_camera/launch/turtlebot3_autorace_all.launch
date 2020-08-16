@@ -1,0 +1,72 @@
+<launch>
+  <!-- launch turtlebot3_autorace_camera_pi.launch in the raspberry pi before launch this file -->
+  <!-- launch this in remote pc when you are doing calibration-->
+
+  <arg name="calibration_mode" default="$(env AUTO_ALL_CALIB)" doc="calibration_mode type [calibration, action]"/>
+  
+  <arg name="use_gazebo" default="false" doc="gazebo_mode type [true, false]"/>
+
+    <group if="$(arg use_gazebo)">
+      <!-- image transport from compressed to raw -->
+      <node pkg="image_transport" type="republish" name="republish" args="compressed">
+        <remap from="in"  to="camera/rgb/image_raw" />
+        <remap from="out"   to="camera/image"/>
+      </node>
+      <node pkg="topic_tools" type="relay" name="relay_camera_info" args="/camera/rgb/camera_info /camera/camera_info"/>
+    </group>
+
+    <group unless="$(arg use_gazebo)">
+      <!-- image transport from compressed to raw -->
+      <node pkg="image_transport" type="republish" name="republish" args="compressed in:=camera/image raw out:=camera/image" />
+    </group>
+
+
+  <!-- run the following under calibration mode -->
+  <!-- camera calibration uses raw image -->
+  <node if="$(eval calibration_mode == 'calibration')" pkg="camera_calibration" type="cameracalibrator.py" name="cameracalibrator" args="--size 8x6 --square 0.108 image:=/camera/image camera:=/camera" output="screen"/>
+
+  <!-- run the following under action mode -->
+  <!-- image rectification -->
+  <node if="$(eval calibration_mode == 'action')" ns="camera" pkg="image_proc" type="image_proc" name="image_proc" args="_approximate_sync:=true" output="screen">
+    <remap from="image_raw" to="image" />
+    <param name="queue_size" value="20" />
+  </node>
+
+
+  <group ns="camera">
+    <!-- image brightness & contrast compensation of ground-projected image -->
+    <node pkg="turtlebot3_autorace_camera" type="image_compensation" name="image_compensation" output="screen">
+      <rosparam command="load" file="$(find turtlebot3_autorace_camera)/calibration/extrinsic_calibration/compensation.yaml" />
+      <param if="$(eval calibration_mode == 'calibration')" name="/is_extrinsic_camera_calibration_mode" value="True"/>
+      <param if="$(eval calibration_mode == 'action')" name="/is_extrinsic_camera_calibration_mode" value="False"/>
+      <remap from="/camera/image_input" to="/camera/image_rect_color" />
+      <remap from="/camera/image_input/compressed" to="/camera/image_rect_color/compressed" />
+      <remap from="/camera/image_output" to="/camera/image_compensated" />
+      <remap from="/camera/image_output/compressed" to="/camera/image_compensated/compressed" />
+    </node>
+
+    <!-- image ground projection -->
+    <node pkg="turtlebot3_autorace_camera" type="image_projection" name="image_projection" output="screen">
+      <rosparam command="load" file="$(find turtlebot3_autorace_camera)/calibration/extrinsic_calibration/projection.yaml" />
+      <param if="$(eval calibration_mode == 'calibration')" name="/is_extrinsic_camera_calibration_mode" value="True"/>
+      <param if="$(eval calibration_mode == 'action')" name="/is_extrinsic_camera_calibration_mode" value="False"/>    
+      <remap from="/camera/image_input" to="/camera/image_rect_color" />
+      <remap from="/camera/image_input/compressed" to="/camera/image_rect_color/compressed" />
+      <remap from="/camera/image_output" to="/camera/image_projected" />
+      <remap from="/camera/image_output/compressed" to="/camera/image_projected/compressed" />
+      <remap from="/camera/image_calib" to="/camera/image_extrinsic_calib" />
+      <remap from="/camera/image_calib/compressed" to="/camera/image_extrinsic_calib/compressed" />
+    </node>
+
+    <!-- image brightness & contrast compensation of ground-projected image -->
+    <node pkg="turtlebot3_autorace_camera" type="image_compensation" name="image_compensation_projection" output="screen">
+      <rosparam command="load" file="$(find turtlebot3_autorace_camera)/calibration/extrinsic_calibration/compensation.yaml" />
+      <param if="$(eval calibration_mode == 'calibration')" name="/is_extrinsic_camera_calibration_mode" value="True"/>
+      <param if="$(eval calibration_mode == 'action')" name="/is_extrinsic_camera_calibration_mode" value="False"/>    
+      <remap from="/camera/image_input" to="/camera/image_projected" />
+      <remap from="/camera/image_input/compressed" to="/camera/image_projected/compressed" />
+      <remap from="/camera/image_output" to="/camera/image_projected_compensated" />
+      <remap from="/camera/image_output/compressed" to="/camera/image_projected_compensated/compressed" />
+    </node>
+  </group>
+</launch>

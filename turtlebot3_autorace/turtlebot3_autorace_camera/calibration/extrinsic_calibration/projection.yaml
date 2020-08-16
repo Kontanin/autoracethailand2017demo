@@ -1,0 +1,7 @@
+camera:
+  extrinsic_camera_calibration:
+    top_x: 82
+    top_y: 56
+    bottom_x: 320
+    bottom_y: 120
+
